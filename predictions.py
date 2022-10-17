@@ -109,11 +109,30 @@ def scores_func(args):
         matches[row.match] = row
     scores = []
     for row in load_responses(args.responses):
+        needs_report = args.individual and row.name in args.individual
+        if needs_report:
+            row.correct = []
+            row.incorrect = []
         for match in row.predictions:
             prediction = row.predictions[match]
             if prediction == matches[match].outcome:
                 row.score = row.score + 1
+                if needs_report:
+                    row.correct.append(SimpleNamespace(match=match, prediction=prediction))
+            elif needs_report:
+                row.incorrect.append(SimpleNamespace(match=match, prediction=prediction))
             matches[match].predictions[prediction].append(row.name)
+        if needs_report:
+            print(f"Individual breakdown: {row.name}",
+                  f"----------------------{'-'*len(row.name)}",
+                  "",
+                  f"Correct guesses ({len(row.correct)}):",
+                  '\n'.join([f"{guess.match} - {guess.prediction}" for guess in row.correct]),
+                  "",
+                  f"Incorrect guesses ({len(row.incorrect)}):",
+                  '\n'.join([f"{guess.match} - {guess.prediction}" for guess in row.incorrect]),
+                  "",
+                  sep="\n")
         scores.append(row)
     sorted_scores = sorted(scores, reverse=True, key=lambda x: x.score)
     print("Match breakdowns")
@@ -171,10 +190,10 @@ def totals_func(args):
         print(f"{total.name}: {total.total_score}")
     with open(args.totals, 'w') as f:
         writer = csv.writer(f)
-        writer.writerow(['name', 'total'] + list(map(lambda x: f"day {x} score", range(1, day_number))))
+        writer.writerow(['name', 'total'] + [f"day {x} score" for x in range(1, day_number)])
         for total in sorted_totals:
             writer.writerow([total.name, total.total_score] +
-                list(map(lambda x: total.scores[x] if x in total.scores else 0, range(1, day_number))))
+                [total.scores[x] if x in total.scores else 0 for x in range(1, day_number)])
         f.close()
     
 
@@ -207,6 +226,9 @@ scores_cmd.add_argument('--scores',
                          required=True,
                          nargs='?',
                          help='Day scores file')
+scores_cmd.add_argument('--individual',
+                         nargs='+',
+                         help='Report breakdowns for individuals')
 scores_cmd.set_defaults(func=scores_func)
 
 totals_cmd = subparsers.add_parser('totals', description='Generates score totals file from day score files')
