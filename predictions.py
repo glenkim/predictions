@@ -2,8 +2,6 @@ import argparse
 import csv
 from types import SimpleNamespace
 
-results = {}
-scores = {}
 
 def parse_match(raw_match):
     words = raw_match.split(' ')
@@ -26,15 +24,18 @@ def load_matches_from_responses(responses):
         ret.append(match)
     return ret
 
+
 def sanitize_outcome(team):
     team = team.replace("Royal Never Give Up", "RNG")
     return f"{team} Victory"
+
 
 def get_valid_outcomes(match):
     if match.match_type == 'Bo2':
         return ['Tie', sanitize_outcome(match.team1), sanitize_outcome(match.team2)]
     else:
         return [sanitize_outcome(match.team1), sanitize_outcome(match.team2)]
+
 
 def get_outcome(match):
     valid_outcomes = get_valid_outcomes(match)
@@ -51,6 +52,7 @@ def get_outcome(match):
         else:
             return valid_outcomes[result]
 
+
 def matches_func(args):
     matches = load_matches_from_responses(args.responses)
     ret = []
@@ -62,6 +64,7 @@ def matches_func(args):
         writer.writerow(['match', 'outcome'])
         writer.writerows(ret)
         f.close()
+
 
 def load_matches(matches):
     with open(matches) as f:
@@ -103,7 +106,6 @@ def scores_func(args):
     for row in load_matches(args.matches):
         for outcome in get_valid_outcomes(parse_match(row.match)):
             row.predictions[outcome] = []
-        matches_list.append(row)
         matches[row.match] = row
     scores = []
     for row in load_responses(args.responses):
@@ -147,7 +149,6 @@ def load_scores(scores):
                 break
         f.close()
     return ret
-
 
 
 def totals_func(args):
