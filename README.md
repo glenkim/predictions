@@ -3,6 +3,11 @@ Predictions Utilities
 
 CapSteel
 
+Setup
+-----
+
+Requires Python 3.6+.
+
 Getting Started
 ---------------
 
