@@ -99,7 +99,6 @@ def load_responses(responses):
 
 
 def scores_func(args):
-    matches_list = []
     matches = {}
     for row in load_matches(args.matches):
         for outcome in get_valid_outcomes(parse_match(row.match)):
@@ -117,7 +116,8 @@ def scores_func(args):
     sorted_scores = sorted(scores, reverse=True, key=lambda x: x.score)
     print("Match breakdowns")
     print("----------------")
-    for match in matches_list:
+    for key in matches:
+        match = matches[key]
         print(f"{match.match}: {match.outcome} - {len(match.predictions[match.outcome])} correct guesses")
         for outcome, predictions in match.predictions.items():
             print(f"{outcome} ({len(predictions)}): {', '.join(predictions)}")
@@ -132,6 +132,49 @@ def scores_func(args):
         writer.writerows(map(lambda score: [score.name, score.score], sorted_scores))
         f.close()
 
+
+def load_scores(scores):
+    with open(scores) as f:
+        reader = csv.DictReader(f)
+        ret = []
+        while True:
+            try:
+                row = reader.__next__()
+                obj = SimpleNamespace(name=row['name'], score=row['score'])
+                # print(f"Loaded match: match={obj.match} outcome={obj.outcome}")
+                ret.append(obj)
+            except StopIteration:
+                break
+        f.close()
+    return ret
+
+
+
+def totals_func(args):
+    unsorted_totals = []
+    totals = {}
+    day_number = 1
+    for scores in args.scores:
+        for row in load_scores(scores):
+            if row.name not in totals:
+                total = SimpleNamespace(name=row.name, scores={}, total_score=0)
+                unsorted_totals.append(total)
+                totals[total.name] = total
+            totals[row.name].scores[day_number] = int(row.score)
+            totals[row.name].total_score = totals[row.name].total_score + int(row.score)
+        day_number = day_number + 1
+    sorted_totals = sorted(unsorted_totals, reverse=True, key=lambda x: x.total_score)
+    print("All Rankings")
+    print("----------------")
+    for total in sorted_totals:
+        print(f"{total.name}: {total.total_score}")
+    with open(args.totals, 'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(['name', 'total'] + list(map(lambda x: f"day {x} score", range(1, day_number))))
+        for total in sorted_totals:
+            writer.writerow([total.name, total.total_score] +
+                list(map(lambda x: total.scores[x] if x in total.scores else 0, range(1, day_number))))
+        f.close()
     
 
 cmd = argparse.ArgumentParser(description='Predictions utilities')
@@ -142,23 +185,39 @@ subparsers = cmd.add_subparsers(title='subcommands',
 matches_cmd = subparsers.add_parser('matches', description='Generates a day matches file from user input')
 matches_cmd.add_argument('--responses',
                          required=True,
+                         nargs='?',
                          help='Predictions responses file')
 matches_cmd.add_argument('--matches',
                          required=True,
+                         nargs='?',
                          help='Match results file')
 matches_cmd.set_defaults(func=matches_func)
 
 scores_cmd = subparsers.add_parser('scores', description='Generates a day scores file from files')
 scores_cmd.add_argument('--responses',
                          required=True,
+                         nargs='?',
                          help='Predictions responses file')
 scores_cmd.add_argument('--matches',
                          required=True,
+                         nargs='?',
                          help='Match results file')
 scores_cmd.add_argument('--scores',
                          required=True,
+                         nargs='?',
                          help='Day scores file')
 scores_cmd.set_defaults(func=scores_func)
+
+totals_cmd = subparsers.add_parser('totals', description='Generates score totals file from day score files')
+totals_cmd.add_argument('--scores',
+                         required=True,
+                         nargs='+',
+                         help='Day scores files')
+totals_cmd.add_argument('--totals',
+                         required=True,
+                         nargs='?',
+                         help='Score totals file')
+totals_cmd.set_defaults(func=totals_func)
 
 args = cmd.parse_args()
 args.func(args)
