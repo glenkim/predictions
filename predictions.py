@@ -26,7 +26,6 @@ def load_matches_from_responses(responses):
 
 
 def sanitize_outcome(team):
-    team = team.replace("Royal Never Give Up", "RNG")
     return f"{team} Victory"
 
 
@@ -109,19 +108,17 @@ def scores_func(args):
         matches[row.match] = row
     scores = []
     for row in load_responses(args.responses):
-        needs_report = args.individual and row.name in args.individual
-        if needs_report:
-            row.correct = []
-            row.incorrect = []
+        row.correct = []
+        row.incorrect = []
         for match in row.predictions:
             prediction = row.predictions[match]
             if prediction == matches[match].outcome:
                 row.score = row.score + 1
-                if needs_report:
-                    row.correct.append(SimpleNamespace(match=match, prediction=prediction))
-            elif needs_report:
+                row.correct.append(SimpleNamespace(match=match, prediction=prediction))
+            else:
                 row.incorrect.append(SimpleNamespace(match=match, prediction=prediction))
             matches[match].predictions[prediction].append(row.name)
+        needs_report = args.individual and row.name in args.individual
         if needs_report:
             print(f"Individual breakdown: {row.name}",
                   f"----------------------{'-'*len(row.name)}",
@@ -145,13 +142,28 @@ def scores_func(args):
         print('')
     print("Today's Rankings")
     print("----------------")
+    one_pointers = {}
+    zero_pointers = []
     for score in sorted_scores:
         print(f"{score.name}: {score.score}")
+        if score.score == 1:
+            team = score.correct[0].prediction
+            if team not in one_pointers:
+                one_pointers[team] = []
+            one_pointers[team].append(score.name)
+        elif score.score == 0:
+            zero_pointers.append(score.name)
+    print("")
+    for team in one_pointers:
+        print(f"Saved from Forsaken Oracle™ by {team}: {', '.join(one_pointers[team])}")
+    if zero_pointers:
+        print(f"Forsaken Oracle™ award: {', '.join(zero_pointers)}")
     with open(args.scores, 'w') as f:
         writer = csv.writer(f)
         writer.writerow(['name', 'score'])
         writer.writerows(map(lambda score: [score.name, score.score], sorted_scores))
         f.close()
+
 
 
 def load_scores(scores):
