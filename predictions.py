@@ -35,7 +35,6 @@ def get_valid_outcomes(match):
     else:
         return [sanitize_outcome(match.team1), sanitize_outcome(match.team2)]
 
-
 def get_outcome(match):
     valid_outcomes = get_valid_outcomes(match)
     print(f"\n{match.team1} v. {match.team2} - {match.match_type}")
@@ -49,15 +48,32 @@ def get_outcome(match):
         except ValueError as e:
             pass
         else:
-            return valid_outcomes[result]
+            match.outcome = valid_outcomes[result]
+            break
+
+def get_aliased_match(last_match, new_match):
+    team1 = new_match.team1
+    team2 = ' '.join(last_match.outcome.split(' ')[:-1])
+    match_type = new_match.match_type
+    raw_match = f"{team1} Vs {team2} ({match_type})"
+    return SimpleNamespace(raw_match=raw_match, team1=team1, team2=team2, match_type=match_type)
 
 
 def matches_func(args):
     matches = load_matches_from_responses(args.responses)
     ret = []
     print("\nResults\n-------")
+    last_match = None
     for match in matches:
-        ret.append([match.raw_match, get_outcome(match)])
+        if last_match and (match.team2 == last_match.team1 or match.team2 == last_match.team2):
+            if ' '.join(last_match.outcome.split(' ')[:-1]) == match.team2:
+                get_outcome(match)
+            else:
+                match.outcome = f"alias={get_aliased_match(last_match, match).raw_match}"
+        else:
+            get_outcome(match)
+            last_match = match
+        ret.append([match.raw_match, match.outcome])
     with open(args.matches, 'w') as f:
         writer = csv.writer(f)
         writer.writerow(['match', 'outcome'])
@@ -100,12 +116,30 @@ def load_responses(responses):
     return ret
 
 
+def get_place(place):
+    if place % 10 == 1:
+        return f"{place}st"
+    elif place % 10 == 2:
+        return f"{place}nd"
+    elif place %10 == 3:
+        return f"{place}rd"
+    else :
+        return f"{place}th"
+
+
 def scores_func(args):
     matches = {}
+    aliases = {}
     for row in load_matches(args.matches):
-        for outcome in get_valid_outcomes(parse_match(row.match)):
-            row.predictions[outcome] = []
-        matches[row.match] = row
+        if row.outcome.find("alias=") < 0:
+            for outcome in get_valid_outcomes(parse_match(row.match)):
+                row.predictions[outcome] = []
+            matches[row.match] = row
+        else:
+            aliases[row.match] = row.outcome.split('=')[1]
+    for alias in aliases:
+        matches[alias] = matches[aliases[alias]]
+        matches[alias].predictions[sanitize_outcome(parse_match(alias).team2)] = []
     scores = []
     for row in load_responses(args.responses):
         row.correct = []
@@ -115,9 +149,10 @@ def scores_func(args):
             if prediction == matches[match].outcome:
                 row.score = row.score + 1
                 row.correct.append(SimpleNamespace(match=match, prediction=prediction))
-            else:
+            elif prediction:
                 row.incorrect.append(SimpleNamespace(match=match, prediction=prediction))
-            matches[match].predictions[prediction].append(row.name)
+            if prediction:
+                matches[match].predictions[prediction].append(row.name)
         needs_report = args.individual and row.name in args.individual
         if needs_report:
             print(f"Individual breakdown: {row.name}",
@@ -135,6 +170,8 @@ def scores_func(args):
     print("Match breakdowns")
     print("----------------")
     for key in matches:
+        if key in aliases:
+            continue
         match = matches[key]
         print(f"{match.match}: {match.outcome} - {len(match.predictions[match.outcome])} correct guesses")
         for outcome, predictions in match.predictions.items():
@@ -144,8 +181,11 @@ def scores_func(args):
     print("----------------")
     one_pointers = {}
     zero_pointers = []
+    bucketed_scores = {}
     for score in sorted_scores:
-        print(f"{score.name}: {score.score}")
+        if score.score not in bucketed_scores:
+            bucketed_scores[score.score] = []
+        bucketed_scores[score.score].append(score.name)
         if score.score == 1:
             team = score.correct[0].prediction
             if team not in one_pointers:
@@ -153,11 +193,15 @@ def scores_func(args):
             one_pointers[team].append(score.name)
         elif score.score == 0:
             zero_pointers.append(score.name)
+    place = 1
+    for score in bucketed_scores:
+        print(f"{get_place(place)}: {' / '.join(map(lambda x: f'@'+x, bucketed_scores[score]))} ({score}pts)")
+        place = place + len(bucketed_scores[score])
     print("")
     for team in one_pointers:
-        print(f"Saved from Forsaken Oracle™ by {team}: {', '.join(one_pointers[team])}")
+        print(f"{team} saved them from a Forsaken Oracle™ Award: {', '.join(map(lambda x: f'@'+x, one_pointers[team]))}")
     if zero_pointers:
-        print(f"Forsaken Oracle™ award: {', '.join(zero_pointers)}")
+        print(f"Forsaken Oracle™ award: {', '.join(map(lambda x: f'@'+x, zero_pointers))}")
     with open(args.scores, 'w') as f:
         writer = csv.writer(f)
         writer.writerow(['name', 'score'])
@@ -198,8 +242,15 @@ def totals_func(args):
     sorted_totals = sorted(unsorted_totals, reverse=True, key=lambda x: x.total_score)
     print("All Rankings")
     print("----------------")
+    bucketed_totals = {}
     for total in sorted_totals:
-        print(f"{total.name}: {total.total_score}")
+        if total.total_score not in bucketed_totals:
+            bucketed_totals[total.total_score] = []
+        bucketed_totals[total.total_score].append(total.name)
+    place = 1
+    for total in bucketed_totals:
+        print(f"{get_place(place)}: {' / '.join(map(lambda x: f'@'+x, bucketed_totals[total]))} ({total}pts)")
+        place = place + len(bucketed_totals[total])
     with open(args.totals, 'w') as f:
         writer = csv.writer(f)
         writer.writerow(['name', 'total'] + [f"day {x} score" for x in range(1, day_number)])

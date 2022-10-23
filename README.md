@@ -11,7 +11,8 @@ Requires Python 3.6+.
 Getting Started
 ---------------
 
-1)  Download your responses csv files from Google Drive.
+1)  Download your responses csv files from Google Drive. Massage any inconsistencies in data by hand (you might
+    not notice these until you start seeing errors in step 3).
 
 2)  Create your match outcome files.
 
@@ -37,3 +38,14 @@ Getting Started
     ```
 
     This example adds up scores recorded in day1_scores.csv and day2_scores.csv, then saves the computed total scores to total_scores.csv
+
+Useful scripts
+--------------
+
+Re-generate all scores output
+
+```bash
+x=8
+for i in `seq ${x}`; do python3 predictions.py scores --responses in/day${i}_responses.csv --matches in/day${i}_matches.csv --scores out/day${i}_scores.csv > out/day${i}_scores.txt; done
+python3 predictions.py totals --scores $(for i in `seq ${x}`; do echo out/day${i}_scores.csv; done) --total out/day${x}_totals.csv > out/day${x}_totals.txt
+```
